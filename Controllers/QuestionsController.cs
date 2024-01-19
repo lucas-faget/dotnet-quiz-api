@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QuizApi.Models;
@@ -29,7 +24,7 @@ namespace QuizApi.Controllers
 
         // GET: api/Questions/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Question>> GetQuestion(long id)
+        public async Task<ActionResult<QuestionDTO>> GetQuestion(long id)
         {
             var question = await _context.Questions.FindAsync(id);
 
@@ -38,7 +33,7 @@ namespace QuizApi.Controllers
                 return NotFound();
             }
 
-            return question;
+            return QuestionToDTO(question);
         }
 
         // PUT: api/Questions/5
@@ -104,5 +99,13 @@ namespace QuizApi.Controllers
         {
             return _context.Questions.Any(e => e.Id == id);
         }
+
+        private static QuestionDTO QuestionToDTO(Question question) => new QuestionDTO
+        {
+            Id = question.Id,
+            Category = question.Category,
+            Title = question.Title,
+            Difficulty = question.Difficulty
+        };
     }
 }
