@@ -107,5 +107,31 @@ namespace QuizApi.Controllers
             Title = question.Title,
             Difficulty = question.Difficulty
         };
+
+        // POST: api/Questions/5/Answer
+        [HttpPost("{id}/Answer")]
+        public async Task<ActionResult> CheckAnswer(long id, [FromBody] string userAnswer)
+        {
+            var question = await _context.Questions.FindAsync(id);
+
+            if (question == null)
+            {
+                return NotFound();
+            }
+
+            if (question.AcceptedAnswers != null && IsAnswerRight(userAnswer, question.AcceptedAnswers))
+            {
+                return Ok(new { Result = AnswerResult.Right });
+            }
+            else
+            {
+                return Ok(new { Result = AnswerResult.Wrong });
+            }
+        }
+
+        private bool IsAnswerRight(string userAnswer, string[] acceptedAnswers)
+        {
+            return acceptedAnswers.Any(answer => string.Equals(userAnswer, answer, StringComparison.OrdinalIgnoreCase));
+        }
     }
 }
