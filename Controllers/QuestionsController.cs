@@ -8,9 +8,9 @@ namespace QuizApi.Controllers
     [ApiController]
     public class QuestionsController : ControllerBase
     {
-        private readonly QuestionContext _context;
+        private readonly QuizContext _context;
 
-        public QuestionsController(QuestionContext context)
+        public QuestionsController(QuizContext context)
         {
             _context = context;
         }
@@ -129,7 +129,7 @@ namespace QuizApi.Controllers
             }
         }
 
-        private bool IsAnswerRight(string userAnswer, string[] acceptedAnswers)
+        private static bool IsAnswerRight(string userAnswer, List<string> acceptedAnswers)
         {
             return acceptedAnswers.Any(answer => string.Equals(userAnswer, answer, StringComparison.OrdinalIgnoreCase));
         }

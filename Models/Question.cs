@@ -15,8 +15,8 @@ public class Question
     public string? Answer { get; set; }
 
     [Required]
-    [MinLength(1, ErrorMessage = "The AcceptedAnswers field can not be empty.")]
-    public string[]? AcceptedAnswers { get; set; }
+    [MinLength(1, ErrorMessage = "The AcceptedAnswers field cannot be empty.")]
+    public List<string> AcceptedAnswers { get; set; } = [];
 
     public string? Difficulty { get; set; }
 }
