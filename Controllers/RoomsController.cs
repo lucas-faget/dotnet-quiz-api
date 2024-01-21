@@ -20,14 +20,16 @@ namespace QuizApi.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Room>>> GetRooms()
         {
-            return await _context.Rooms.ToListAsync();
+            return await _context.Rooms.Include(r => r.Questions).ToListAsync();
         }
 
         // GET: api/Rooms/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Room>> GetRoom(long id)
         {
-            var room = await _context.Rooms.FindAsync(id);
+            var room = await _context.Rooms
+                .Include(r => r.Questions)
+                .FirstOrDefaultAsync(r => r.Id == id);
 
             if (room == null)
             {
@@ -42,7 +44,7 @@ namespace QuizApi.Controllers
         [HttpPost]
         public async Task<ActionResult<Room>> PostRoom()
         {
-            Room room = new Room();
+            var room = new Room();
 
             var randomQuestions = await _context.Questions
                 .OrderBy(q => Guid.NewGuid())
