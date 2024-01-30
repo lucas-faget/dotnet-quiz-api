@@ -1,8 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace QuizApi.Models;
 
 public class Player
 {
-    public string? ConnectionId { get; set; }
+    [Key]
+    public string ConnectionId { get; set; } = null!;
 
     public string? Name { get; set; }
+    
+    public Room? Room { get; set; }
 }

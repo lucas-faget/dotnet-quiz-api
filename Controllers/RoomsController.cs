@@ -9,7 +9,7 @@ namespace QuizApi.Controllers
     public class RoomsController : ControllerBase
     {
         private readonly QuizContext _context;
-        private readonly int _roomQuestionsCount = 3;
+        private static readonly int _roomQuestionsCount = 3;
 
         public RoomsController(QuizContext context)
         {

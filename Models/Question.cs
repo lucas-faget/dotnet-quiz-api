@@ -9,10 +9,10 @@ public class Question
     public string? Category { get; set; }
 
     [Required]
-    public string? Title { get; set; }
+    public string Title { get; set; } = null!;
 
     [Required]
-    public string? Answer { get; set; }
+    public string Answer { get; set; } = null!;
 
     [Required]
     [MinLength(1, ErrorMessage = "The AcceptedAnswers field cannot be empty.")]
