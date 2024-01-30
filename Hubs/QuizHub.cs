@@ -74,7 +74,15 @@ namespace QuizApi.Hubs
 
             var player = SearchPlayerById(Context.ConnectionId);
 
-            if (player != null && player.Room != null) {
+            if (player != null && player.Room != null)
+            {
+                player.Room.Players.RemoveAll(player => player.ConnectionId == Context.ConnectionId);
+
+                if (player.Room.Players.Count == 0)
+                {
+                    _rooms.Remove(player.Room.Id);
+                }
+
                 await SendMessage(player.Room.Id, $"{player.Name} has left.");
             }
         }
@@ -87,6 +95,14 @@ namespace QuizApi.Hubs
         public async Task SendMessage(long roomId, string message)
         {
             await Clients.Group(roomId.ToString()).SendAsync("ReceiveMessage", message);
+        }
+
+        public async Task GetQuestions(long roomId)
+        {
+            if (_rooms.TryGetValue(roomId, out Room? room))
+            {
+                await Clients.Group(roomId.ToString()).SendAsync("ReceiveQuestions", room.Questions);
+            }
         }
 
         public Player? SearchPlayerById(string id)
