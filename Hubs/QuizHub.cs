@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using QuizApi.Models;
 using QuizApi.Services;
+using System.Timers;
+using Timer = System.Timers.Timer;
 
 namespace QuizApi.Hubs
 {
@@ -9,8 +11,8 @@ namespace QuizApi.Hubs
     {
         private readonly QuizContext _context;
         private readonly IQuestionsService _questionsService;
-        private static readonly int _roomQuestionsCount = 3;
         private static readonly Dictionary<long, Room> _rooms = [];
+        private static readonly Dictionary<long, Timer> _timers = [];
 
         public QuizHub(QuizContext context, IQuestionsService questionsService)
         {
@@ -24,16 +26,6 @@ namespace QuizApi.Hubs
 
             var room = new Room();
 
-            var randomQuestions = await _context.Questions
-                .OrderBy(q => Guid.NewGuid())
-                .Take(_roomQuestionsCount)
-                .ToListAsync();
-
-            foreach (var question in randomQuestions)
-            {
-                room.Questions.Add(question);
-            }
-
             room.Players.Add(new Player {
                 ConnectionId = Context.ConnectionId,
                 Name = playerName,
@@ -45,6 +37,8 @@ namespace QuizApi.Hubs
             await Groups.AddToGroupAsync(Context.ConnectionId, room.Id.ToString());
 
             await SendMessage(room.Id, $"{playerName} created the room.");
+
+            await NewGame(room.Id);
         }
 
         public async Task JoinRoom(long roomId, string playerName = "")
@@ -62,12 +56,78 @@ namespace QuizApi.Hubs
                 });
 
                 await SendMessage(roomId, $"{playerName} has joined.");
-                Console.WriteLine("join room");
             }
             else
             {
                 await CreateRoom(playerName);
-                Console.WriteLine("create room");
+            }
+        }
+
+        public async Task NewGame(long roomId)
+        {
+            if (_rooms.TryGetValue(roomId, out Room? room))
+            {
+                var randomQuestions = await _context.Questions
+                    .OrderBy(q => Guid.NewGuid())
+                    .Take(3)
+                    .ToListAsync();
+
+                var game = new Game {
+                    Room = room,
+                    Questions = randomQuestions
+                };
+
+                room.Game = game;
+
+                var questionDTO = GetCurrentQuestion(game);
+
+                if (questionDTO != null)
+                {
+                    await SendQuestion(roomId, questionDTO);
+
+                    await SendMessage(roomId, $"Question have been sent.");
+                }
+
+                await SendMessage(roomId, $"Game has started.");
+            }
+        }
+
+        public QuestionDTO? GetCurrentQuestion(Game game)
+        {
+            if (game.QuestionIndex >= 0 && game.QuestionIndex < game.Questions.Count)
+            {
+                var question = game.Questions[game.QuestionIndex];
+
+                var questionDTO = _questionsService.QuestionToDTO(question);
+
+                return questionDTO;
+            }
+            
+            return null;
+        }
+
+        public async Task SendMessage(long roomId, string message)
+        {
+            await Clients.Group(roomId.ToString()).SendAsync("ReceiveMessage", message);
+        }
+
+        public async Task SendQuestion(long roomId, QuestionDTO question)
+        {
+            await Clients.Group(roomId.ToString()).SendAsync("ReceiveQuestion", question);
+        }
+
+        public async Task CheckAnswer(long roomId, long questionId, string userAnswer)
+        {
+            if (_rooms.ContainsKey(roomId))
+            {
+                var question = await _context.Questions.FindAsync(questionId);
+
+                if (question != null && question.AcceptedAnswers != null)
+                {
+                    var result = _questionsService.IsAnswerRight(userAnswer, question.AcceptedAnswers) ? AnswerResult.Right : AnswerResult.Wrong;
+
+                    await Clients.Group(roomId.ToString()).SendAsync("ReceiveAnswerResult", result);
+                }
             }
         }
 
@@ -87,19 +147,6 @@ namespace QuizApi.Hubs
                 }
 
                 await SendMessage(player.Room.Id, $"{player.Name} has left.");
-            }
-        }
-
-        public async Task SendMessage(long roomId, string message)
-        {
-            await Clients.Group(roomId.ToString()).SendAsync("ReceiveMessage", message);
-        }
-
-        public async Task GetQuestions(long roomId)
-        {
-            if (_rooms.TryGetValue(roomId, out Room? room))
-            {
-                await Clients.Group(roomId.ToString()).SendAsync("ReceiveQuestions", room.Questions);
             }
         }
 
