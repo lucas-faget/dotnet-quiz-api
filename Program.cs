@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using QuizApi.Models;
+using QuizApi.Services;
 using QuizApi.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddDbContext<QuizContext>(opt => opt.UseInMemoryDatabase("Quiz"));
+builder.Services.AddSingleton<IQuestionsService, QuestionsService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();

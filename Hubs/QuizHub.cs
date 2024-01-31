@@ -1,18 +1,21 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using QuizApi.Models;
+using QuizApi.Services;
 
 namespace QuizApi.Hubs
 {
     public class QuizHub : Hub
     {
         private readonly QuizContext _context;
+        private readonly IQuestionsService _questionsService;
         private static readonly int _roomQuestionsCount = 3;
         private static readonly Dictionary<long, Room> _rooms = [];
 
-        public QuizHub(QuizContext context)
+        public QuizHub(QuizContext context, IQuestionsService questionsService)
         {
             _context = context;
+            _questionsService = questionsService;
         }
 
         public async Task CreateRoom(string playerName = "")
@@ -86,11 +89,6 @@ namespace QuizApi.Hubs
                 await SendMessage(player.Room.Id, $"{player.Name} has left.");
             }
         }
-
-        // public async Task SendMessage(string message)
-        // {
-        //     await Clients.All.SendAsync("ReceiveMessage", message);
-        // }
 
         public async Task SendMessage(long roomId, string message)
         {

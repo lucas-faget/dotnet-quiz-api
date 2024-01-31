@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QuizApi.Models;
+using QuizApi.Services;
 
 namespace QuizApi.Controllers
 {
@@ -9,10 +10,12 @@ namespace QuizApi.Controllers
     public class QuestionsController : ControllerBase
     {
         private readonly QuizContext _context;
+        private readonly IQuestionsService _questionsService;
 
-        public QuestionsController(QuizContext context)
+        public QuestionsController(QuizContext context, IQuestionsService questionsService)
         {
             _context = context;
+            _questionsService = questionsService;
         }
 
         // GET: api/Questions
@@ -33,7 +36,7 @@ namespace QuizApi.Controllers
                 return NotFound();
             }
 
-            return QuestionToDTO(question);
+            return _questionsService.QuestionToDTO(question);
         }
 
         // PUT: api/Questions/5
@@ -100,14 +103,6 @@ namespace QuizApi.Controllers
             return _context.Questions.Any(e => e.Id == id);
         }
 
-        private static QuestionDTO QuestionToDTO(Question question) => new QuestionDTO
-        {
-            Id = question.Id,
-            Category = question.Category,
-            Title = question.Title,
-            Difficulty = question.Difficulty
-        };
-
         // POST: api/Questions/5/Answer
         [HttpPost("{id}/Answer")]
         public async Task<ActionResult> CheckAnswer(long id, [FromBody] string userAnswer)
@@ -119,7 +114,7 @@ namespace QuizApi.Controllers
                 return NotFound();
             }
 
-            if (question.AcceptedAnswers != null && IsAnswerRight(userAnswer, question.AcceptedAnswers))
+            if (question.AcceptedAnswers != null && _questionsService.IsAnswerRight(userAnswer, question.AcceptedAnswers))
             {
                 return Ok(new { Result = AnswerResult.Right });
             }
@@ -127,11 +122,6 @@ namespace QuizApi.Controllers
             {
                 return Ok(new { Result = AnswerResult.Wrong });
             }
-        }
-
-        private static bool IsAnswerRight(string userAnswer, List<string> acceptedAnswers)
-        {
-            return acceptedAnswers.Any(answer => string.Equals(userAnswer, answer, StringComparison.OrdinalIgnoreCase));
         }
     }
 }
