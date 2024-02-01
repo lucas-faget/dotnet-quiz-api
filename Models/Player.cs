@@ -9,5 +9,5 @@ public class Player
 
     public string? Name { get; set; }
     
-    public Room? Room { get; set; }
+    public long RoomId { get; set; }
 }

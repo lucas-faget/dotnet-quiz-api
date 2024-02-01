@@ -2,8 +2,6 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using QuizApi.Models;
 using QuizApi.Services;
-using System.Timers;
-using Timer = System.Timers.Timer;
 
 namespace QuizApi.Hubs
 {
@@ -29,12 +27,14 @@ namespace QuizApi.Hubs
             room.Players.Add(new Player {
                 ConnectionId = Context.ConnectionId,
                 Name = playerName,
-                Room = room
+                RoomId = room.Id
             });
 
             _rooms.Add(room.Id, room);
 
             await Groups.AddToGroupAsync(Context.ConnectionId, room.Id.ToString());
+
+            await SendPlayers(room.Id, room.Players);
 
             await SendMessage(room.Id, $"{playerName} created the room.");
 
@@ -52,8 +52,10 @@ namespace QuizApi.Hubs
                 room.Players.Add(new Player {
                     ConnectionId = Context.ConnectionId,
                     Name = playerName,
-                    Room = room
+                    RoomId = roomId
                 });
+
+                await SendPlayers(roomId, room.Players);
 
                 await SendMessage(roomId, $"{playerName} has joined.");
             }
@@ -86,29 +88,14 @@ namespace QuizApi.Hubs
                     await SendQuestion(roomId, questionDTO);
 
                     await SendMessage(roomId, $"Question have been sent.");
+
+                    game.QuestionIndex = (game.QuestionIndex + 1) % game.Questions.Count;
+
+                    SetTimer(game);
                 }
 
                 await SendMessage(roomId, $"Game has started.");
             }
-        }
-
-        public QuestionDTO? GetCurrentQuestion(Game game)
-        {
-            if (game.QuestionIndex >= 0 && game.QuestionIndex < game.Questions.Count)
-            {
-                var question = game.Questions[game.QuestionIndex];
-
-                var questionDTO = _questionsService.QuestionToDTO(question);
-
-                return questionDTO;
-            }
-            
-            return null;
-        }
-
-        public async Task SendMessage(long roomId, string message)
-        {
-            await Clients.Group(roomId.ToString()).SendAsync("ReceiveMessage", message);
         }
 
         public async Task SendQuestion(long roomId, QuestionDTO question)
@@ -131,26 +118,61 @@ namespace QuizApi.Hubs
             }
         }
 
+        public async Task SendMessage(long roomId, string message)
+        {
+            await Clients.Group(roomId.ToString()).SendAsync("ReceiveMessage", message);
+        }
+
+        public async Task SendPlayers(long roomId, List<Player> players)
+        {
+            await Clients.Group(roomId.ToString()).SendAsync("ReceivePlayers", players);
+        }
+
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             await base.OnDisconnectedAsync(exception);
 
             var player = SearchPlayerById(Context.ConnectionId);
 
-            if (player != null && player.Room != null)
+            if (player != null)
             {
-                player.Room.Players.RemoveAll(player => player.ConnectionId == Context.ConnectionId);
-
-                if (player.Room.Players.Count == 0)
+                if (_rooms.TryGetValue(player.RoomId, out Room? room))
                 {
-                    _rooms.Remove(player.Room.Id);
-                }
+                    room.Players.RemoveAll(player => player.ConnectionId == Context.ConnectionId);
 
-                await SendMessage(player.Room.Id, $"{player.Name} has left.");
+                    if (room.Players.Count == 0)
+                    {
+                        if (_timers.TryGetValue(player.RoomId, out Timer? timer))
+                        {
+                            timer.Dispose();
+                            _timers.Remove(player.RoomId);
+                        }
+
+                        _rooms.Remove(player.RoomId);
+                    }
+
+                    await SendPlayers(player.RoomId, room.Players);
+
+                    await SendMessage(player.RoomId, $"{player.Name} has left.");
+                }
             }
         }
 
-        public Player? SearchPlayerById(string id)
+        public QuestionDTO? GetCurrentQuestion(Game game)
+        {
+            if (game.QuestionIndex >= 0 && game.QuestionIndex < game.Questions.Count)
+            {
+                var question = game.Questions[game.QuestionIndex];
+
+                var questionDTO = _questionsService.QuestionToDTO(question);
+
+                return questionDTO;
+            }
+            
+            return null;
+        }
+
+        public static Player? SearchPlayerById(string id)
         {
             foreach (var room in _rooms)
             {
@@ -164,6 +186,29 @@ namespace QuizApi.Hubs
             }
 
             return null;
+        }
+
+        private void SetTimer(Game game)
+        {
+            // Timer timer = new Timer(async (_) => await OnQuestionTimeElapsedEvent(game), null, TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
+
+            // _timers.Add(game.Room.Id, timer);
+        }
+
+        private async Task OnQuestionTimeElapsedEvent(Game game)
+        {
+            var questionDTO = GetCurrentQuestion(game);
+
+            if (questionDTO != null)
+            {
+                await SendQuestion(game.Room.Id, questionDTO);
+                
+                await SendMessage(game.Room.Id, $"Question {game.QuestionIndex + 1} have been sent.");
+
+                Console.WriteLine($"Question {game.QuestionIndex + 1} have been sent.");
+
+                game.QuestionIndex = (game.QuestionIndex + 1) % game.Questions.Count;
+            }
         }
     }
 }
