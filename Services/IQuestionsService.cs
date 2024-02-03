@@ -4,7 +4,8 @@ namespace QuizApi.Services
 {
     public interface IQuestionsService
     {
-        public QuestionDTO QuestionToDTO(Question question);
-        public bool IsAnswerRight(string userAnswer, List<string> acceptedAnswers);
+        QuestionDTO QuestionToDTO(Question question);
+        bool IsAnswerRight(string userAnswer, List<string> acceptedAnswers);
+        List<Question> LoadQuestionsFromJson();
     }
 }

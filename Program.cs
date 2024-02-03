@@ -27,6 +27,19 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<QuizContext>();
+    var questionsService = services.GetRequiredService<IQuestionsService>();
+    
+    var questions = questionsService.LoadQuestionsFromJson();
+
+    context.Questions.AddRange(questions);
+    
+    context.SaveChanges();
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {

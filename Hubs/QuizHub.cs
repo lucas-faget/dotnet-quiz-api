@@ -93,9 +93,19 @@ namespace QuizApi.Hubs
             await Clients.Group(roomId.ToString()).SendAsync("ReceivePlayers", players);
         }
 
-        public async Task SendQuestion(long roomId, QuestionDTO question)
+        public async Task SendMessage(long roomId, string message)
         {
-            await Clients.Group(roomId.ToString()).SendAsync("ReceiveQuestion", question);
+            await Clients.Group(roomId.ToString()).SendAsync("ReceiveMessage", message);
+        }
+
+        public async Task SendDelay(long roomId, int seconds)
+        {
+            await Clients.Group(roomId.ToString()).SendAsync("ReceiveDelay", seconds);
+        }
+
+        public async Task SendQuestion(long roomId, QuestionDTO question, int seconds)
+        {
+            await Clients.Group(roomId.ToString()).SendAsync("ReceiveQuestion", question, seconds);
         }
 
         public async Task CheckAnswer(long roomId, long questionId, string userAnswer)
@@ -124,18 +134,13 @@ namespace QuizApi.Hubs
             }
         }
 
-        public async Task SendMessage(long roomId, string message)
-        {
-            await Clients.Group(roomId.ToString()).SendAsync("ReceiveMessage", message);
-        }
-
         public async Task StartGame(long roomId)
         {
             if (_rooms.TryGetValue(roomId, out Room? room))
             {
                 var randomQuestions = await _context.Questions
                     .OrderBy(q => Guid.NewGuid())
-                    .Take(3)
+                    .Take(5)
                     .ToListAsync();
 
                 var game = new Game {
@@ -149,13 +154,15 @@ namespace QuizApi.Hubs
 
                 foreach (var question in game.Questions)
                 {
+                    await SendDelay(roomId, 10);
+
                     await Task.Delay(TimeSpan.FromSeconds(10));
                         
                     var questionDTO = _questionsService.QuestionToDTO(question);
 
                     game.CanAnswer = true;
 
-                    await SendQuestion(roomId, questionDTO);
+                    await SendQuestion(roomId, questionDTO, 20);
 
                     await Task.Delay(TimeSpan.FromSeconds(20));
 
