@@ -120,7 +120,7 @@ namespace QuizApi.Hubs
                     {
                         var result = _questionsService.IsAnswerRight(userAnswer, question.AcceptedAnswers) ? AnswerResult.Right : AnswerResult.Wrong;
 
-                        await Clients.Group(roomId.ToString()).SendAsync("ReceiveAnswerResult", result);
+                        await Clients.Caller.SendAsync("ReceiveAnswerResult", result);
                     }
                 }
             }
