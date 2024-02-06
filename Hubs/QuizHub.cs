@@ -98,6 +98,16 @@ namespace QuizApi.Hubs
             await Clients.Group(roomId.ToString()).SendAsync("ReceiveMessage", message);
         }
 
+        public async Task SendUserMessage(long roomId, string message)
+        {
+            var player = SearchPlayerById(Context.ConnectionId);
+
+            if (player != null)
+            {
+                await Clients.GroupExcept(roomId.ToString(), Context.ConnectionId).SendAsync("ReceiveMessage", message, player.Name);
+            }
+        }
+
         public async Task SendDelay(long roomId, int seconds)
         {
             await Clients.Group(roomId.ToString()).SendAsync("ReceiveDelay", seconds);
@@ -140,7 +150,7 @@ namespace QuizApi.Hubs
             {
                 var randomQuestions = await _context.Questions
                     .OrderBy(q => Guid.NewGuid())
-                    .Take(5)
+                    .Take(50)
                     .ToListAsync();
 
                 var game = new Game {
