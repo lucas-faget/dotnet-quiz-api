@@ -68,7 +68,7 @@ namespace QuizApi.Hubs
         {
             await base.OnDisconnectedAsync(exception);
 
-            var player = SearchPlayerById(Context.ConnectionId);
+            var player = FindPlayerByConnectionId(Context.ConnectionId);
 
             if (player != null)
             {
@@ -100,12 +100,15 @@ namespace QuizApi.Hubs
 
         public async Task SendUserMessage(long roomId, string message)
         {
-            var player = SearchPlayerById(Context.ConnectionId);
-
-            if (player != null)
+            if (_rooms.TryGetValue(roomId, out Room? room))
             {
-                await Clients.GroupExcept(roomId.ToString(), Context.ConnectionId).SendAsync("ReceiveMessage", message, player.Name);
+                var player = room.Players.FirstOrDefault(player => player.ConnectionId == Context.ConnectionId);
+                if (player != null)
+                {
+                    await Clients.GroupExcept(roomId.ToString(), Context.ConnectionId).SendAsync("ReceiveMessage", message, player.Name);
+                }
             }
+
         }
 
         public async Task SendDelay(long roomId, int seconds)
@@ -185,20 +188,9 @@ namespace QuizApi.Hubs
             }
         }
 
-        public static Player? SearchPlayerById(string id)
+        public static Player? FindPlayerByConnectionId(string id)
         {
-            foreach (var room in _rooms)
-            {
-                foreach (var player in room.Value.Players)
-                {
-                    if (player.ConnectionId == id)
-                    {
-                        return player;
-                    }
-                }
-            }
-
-            return null;
+            return _rooms.SelectMany(room => room.Value.Players).FirstOrDefault(player => player.ConnectionId == id);
         }
     }
 }

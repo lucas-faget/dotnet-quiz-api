@@ -15,7 +15,7 @@ namespace QuizApi.Services
 
         public bool IsAnswerRight(string userAnswer, List<string> acceptedAnswers)
         {
-            return acceptedAnswers.Any(answer => string.Equals(userAnswer, answer, StringComparison.OrdinalIgnoreCase));
+            return acceptedAnswers.Any(answer => string.Equals(userAnswer.Trim(), answer.Trim(), StringComparison.OrdinalIgnoreCase));
         }
 
         public List<Question> LoadQuestionsFromJson()
