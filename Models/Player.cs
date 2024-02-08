@@ -9,5 +9,5 @@ public class Player
 
     public string? Name { get; set; }
     
-    public long RoomId { get; set; }
+    public string RoomCode { get; set; } = null!;
 }
