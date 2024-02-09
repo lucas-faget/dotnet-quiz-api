@@ -1,11 +1,13 @@
 using QuizApi.Models;
 using Newtonsoft.Json;
+using System.Text;
+using System.Globalization;
 
 namespace QuizApi.Services
 {
     public class QuestionsService : IQuestionsService
     {
-        public QuestionDTO QuestionToDTO(Question question) => new QuestionDTO
+        public QuestionDTO QuestionToDTO(Question question) => new()
         {
             Id = question.Id,
             Category = question.Category,
@@ -15,7 +17,24 @@ namespace QuizApi.Services
 
         public bool IsAnswerRight(string userAnswer, List<string> acceptedAnswers)
         {
-            return acceptedAnswers.Any(answer => string.Equals(userAnswer.Trim(), answer.Trim(), StringComparison.OrdinalIgnoreCase));
+            return acceptedAnswers.Any(answer => string.Equals(RemoveDiacriticsAndWhiteSpaces(userAnswer), RemoveDiacriticsAndWhiteSpaces(answer), StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static string RemoveDiacriticsAndWhiteSpaces(string text)
+        {
+            string normalizedString = text.Normalize(NormalizationForm.FormD);
+    
+            var stringBuilder = new StringBuilder(normalizedString.Length);
+    
+            foreach (char c in normalizedString)
+            {
+                if (!char.IsWhiteSpace(c) && CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                {
+                    stringBuilder.Append(c);
+                }
+            }
+    
+            return stringBuilder.ToString();
         }
 
         public List<Question> LoadQuestionsFromJson()

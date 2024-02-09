@@ -96,7 +96,7 @@ namespace QuizApi.Hubs
 
                     game.CanAnswer = true;
 
-                    await SendQuestion(code, questionDTO, 20);
+                    await SendQuestion(code, questionDTO, 20, ++game.QuestionNumber, game.Questions.Count);
 
                     await Task.Delay(TimeSpan.FromSeconds(20));
 
@@ -162,9 +162,9 @@ namespace QuizApi.Hubs
             await Clients.Group(code).SendAsync("ReceiveDelay", seconds);
         }
 
-        public async Task SendQuestion(string code, QuestionDTO question, int seconds)
+        public async Task SendQuestion(string code, QuestionDTO question, int seconds, int questionNumber, int maxQuestionNumber)
         {
-            await Clients.Group(code).SendAsync("ReceiveQuestion", question, seconds);
+            await Clients.Group(code).SendAsync("ReceiveQuestion", question, seconds, questionNumber, maxQuestionNumber);
         }
 
         public async Task CheckAnswer(string code, long questionId, string userAnswer)
