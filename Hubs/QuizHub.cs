@@ -7,6 +7,10 @@ namespace QuizApi.Hubs
 {
     public class QuizHub : Hub
     {
+        private static readonly int _questionCount = 20;
+        private static readonly int _timeToAnswerInSeconds = 20;
+        private static readonly int _timeBetweenTwoQuestionsInSeconds = 5;
+        private static readonly Random _random = new();
         private readonly QuizContext _context;
         private readonly IQuestionsService _questionsService;
         private static readonly Dictionary<string, Room> _rooms = [];
@@ -31,7 +35,7 @@ namespace QuizApi.Hubs
 
             await Groups.AddToGroupAsync(Context.ConnectionId, room.Code);
 
-            playerName = string.IsNullOrEmpty(playerName) ? "Player 1" : playerName;
+            playerName = string.IsNullOrEmpty(playerName) ? $"Player {_random.Next(1,10000)}" : playerName;
 
             room.Players.Add(new Player {
                 ConnectionId = Context.ConnectionId,
@@ -41,9 +45,7 @@ namespace QuizApi.Hubs
 
             await SendPlayers(room.Code, room.Players);
 
-            await SendMessage(room.Code, $"{playerName} created the room.");
-
-            await StartGame(room.Code);
+            await SendMessage(room.Code, $"{playerName} has created the room.");
 
             return room.Code;
         }
@@ -54,7 +56,7 @@ namespace QuizApi.Hubs
             {
                 await Groups.AddToGroupAsync(Context.ConnectionId, room.Code);
 
-                playerName = string.IsNullOrEmpty(playerName) ? $"Player {room.Players.Count + 1}" : playerName;
+                playerName = string.IsNullOrEmpty(playerName) ? $"Player {_random.Next(1,10000)}" : playerName;
 
                 room.Players.Add(new Player {
                     ConnectionId = Context.ConnectionId,
@@ -74,7 +76,7 @@ namespace QuizApi.Hubs
             {
                 var randomQuestions = await _context.Questions
                     .OrderBy(q => Guid.NewGuid())
-                    .Take(20)
+                    .Take(_questionCount)
                     .ToListAsync();
 
                 var game = new Game {
@@ -88,17 +90,17 @@ namespace QuizApi.Hubs
 
                 foreach (var question in game.Questions)
                 {
-                    await SendDelay(code, 5);
+                    await SendDelay(code, _timeBetweenTwoQuestionsInSeconds);
 
-                    await Task.Delay(TimeSpan.FromSeconds(5));
+                    await Task.Delay(TimeSpan.FromSeconds(_timeBetweenTwoQuestionsInSeconds));
                         
                     var questionDTO = _questionsService.QuestionToDTO(question);
 
                     game.CanAnswer = true;
 
-                    await SendQuestion(code, questionDTO, 20, ++game.QuestionNumber, game.Questions.Count);
+                    await SendQuestion(code, questionDTO, _timeToAnswerInSeconds, ++game.QuestionNumber, game.Questions.Count);
 
-                    await Task.Delay(TimeSpan.FromSeconds(20));
+                    await Task.Delay(TimeSpan.FromSeconds(_timeToAnswerInSeconds));
 
                     game.CanAnswer = false;
 
@@ -154,7 +156,6 @@ namespace QuizApi.Hubs
                     await Clients.GroupExcept(code, Context.ConnectionId).SendAsync("ReceiveMessage", message, player.Name);
                 }
             }
-
         }
 
         public async Task SendDelay(string code, int seconds)
