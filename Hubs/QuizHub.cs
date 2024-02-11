@@ -26,16 +26,13 @@ namespace QuizApi.Hubs
             return Task.FromResult(_rooms.ContainsKey(code));
         }
 
-        public async Task<string> CreateRoom(string playerName = "")
+        public async Task<string> CreateRoom(string playerName)
         {
-            var room = new Room();
-            Console.WriteLine($"room {room.Code} created");
+            Room room = new();
 
             _rooms.Add(room.Code, room);
 
             await Groups.AddToGroupAsync(Context.ConnectionId, room.Code);
-
-            playerName = string.IsNullOrEmpty(playerName) ? $"Player {_random.Next(1,10000)}" : playerName;
 
             room.Players.Add(new Player {
                 ConnectionId = Context.ConnectionId,
@@ -50,13 +47,11 @@ namespace QuizApi.Hubs
             return room.Code;
         }
 
-        public async Task JoinRoom(string code, string playerName = "")
+        public async Task JoinRoom(string code, string playerName)
         {
             if (_rooms.TryGetValue(code, out Room? room))
             {
                 await Groups.AddToGroupAsync(Context.ConnectionId, room.Code);
-
-                playerName = string.IsNullOrEmpty(playerName) ? $"Player {_random.Next(1,10000)}" : playerName;
 
                 room.Players.Add(new Player {
                     ConnectionId = Context.ConnectionId,
