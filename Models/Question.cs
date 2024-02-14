@@ -5,9 +5,8 @@ namespace QuizApi.Models;
 public class Question
 {
     public long Id { get; set; }
-
     public string? Category { get; set; }
-
+    
     [Required]
     public string Title { get; set; } = null!;
 

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using NuGet.Protocol.Plugins;
 using QuizApi.Models;
 using QuizApi.Services;
 
@@ -10,10 +11,13 @@ namespace QuizApi.Hubs
         private static readonly int _questionCount = 20;
         private static readonly int _timeToAnswerInSeconds = 20;
         private static readonly int _timeBetweenTwoQuestionsInSeconds = 5;
-        private static readonly Random _random = new();
+        private static readonly int _maxAnswerTries = 3;
+        private static readonly int _minPointsByQuestion = 5;
+        private static readonly int _maxPointsByQuestion = 8;
         private readonly QuizContext _context;
         private readonly IQuestionsService _questionsService;
         private static readonly Dictionary<string, Room> _rooms = [];
+        private static int _gameCount = 0;
 
         public QuizHub(QuizContext context, IQuestionsService questionsService)
         {
@@ -35,14 +39,16 @@ namespace QuizApi.Hubs
             await Groups.AddToGroupAsync(Context.ConnectionId, room.Code);
 
             room.Players.Add(new Player {
-                ConnectionId = Context.ConnectionId,
+                Id = Context.ConnectionId,
                 Name = playerName,
                 RoomCode = room.Code
             });
 
-            await SendPlayers(room.Code, room.Players);
+            await SendPlayerScores(room.Code);
 
             await SendMessage(room.Code, $"{playerName} has created the room.");
+
+            await SendMessage(room.Code, $"Room code : {room.Code}");
 
             return room.Code;
         }
@@ -54,12 +60,17 @@ namespace QuizApi.Hubs
                 await Groups.AddToGroupAsync(Context.ConnectionId, room.Code);
 
                 room.Players.Add(new Player {
-                    ConnectionId = Context.ConnectionId,
+                    Id = Context.ConnectionId,
                     Name = playerName,
                     RoomCode = code
                 });
 
-                await SendPlayers(code, room.Players);
+                if (room.Game != null)
+                {
+                    var questionId = room.Game.QuestionNumber > 0 ? room.Game.Questions[room.Game.QuestionNumber - 1]?.Id : null;
+
+                    await SendPlayerScores(code, questionId);
+                }
 
                 await SendMessage(code, $"{playerName} has joined.");
             }
@@ -75,13 +86,14 @@ namespace QuizApi.Hubs
                     .ToListAsync();
 
                 var game = new Game {
+                    Id = ++_gameCount,
                     Room = room,
                     Questions = randomQuestions
                 };
 
                 room.Game = game;
 
-                await SendMessage(code, "Game has started");
+                await SendMessage(code, "Game has started.");
 
                 foreach (var question in game.Questions)
                 {
@@ -91,6 +103,18 @@ namespace QuizApi.Hubs
                         
                     var questionDTO = _questionsService.QuestionToDTO(question);
 
+                    foreach (var player in room.Players)
+                    {
+                        game.Scores.Add(new Score {
+                            PlayerId = player.Id,
+                            GameId = game.Id,
+                            QuestionId = question.Id
+                        });
+                    }
+
+                    await SendPlayerScores(code, question.Id);
+
+                    game.RightAnswerNumber = 0;
                     game.CanAnswer = true;
 
                     await SendQuestion(code, questionDTO, _timeToAnswerInSeconds, ++game.QuestionNumber, game.Questions.Count);
@@ -102,7 +126,9 @@ namespace QuizApi.Hubs
                     await SendAnswer(code, question.Answer);
                 }
 
-                await SendMessage(code, "Game is over");
+                await SendPlayerScores(code);
+
+                await SendMessage(code, "Game is over.");
             }
         }
 
@@ -110,30 +136,65 @@ namespace QuizApi.Hubs
         {
             await base.OnDisconnectedAsync(exception);
 
-            var player = FindPlayerByConnectionId(Context.ConnectionId);
+            var player = FindPlayerById(Context.ConnectionId);
 
             if (player != null)
             {
                 if (_rooms.TryGetValue(player.RoomCode, out Room? room))
                 {
-                    room.Players.RemoveAll(player => player.ConnectionId == Context.ConnectionId);
+                    room.Players.RemoveAll(player => player.Id == Context.ConnectionId);
 
                     if (room.Players.Count == 0)
                     {
                         _rooms.Remove(player.RoomCode);
-                        Console.WriteLine($"room {player.RoomCode} removed");
                     }
 
-                    await SendPlayers(player.RoomCode, room.Players);
+                    if (room.Game != null)
+                    {
+                        var questionId = room.Game.QuestionNumber > 0 ? room.Game.Questions[room.Game.QuestionNumber - 1]?.Id : null;
+
+                        await SendPlayerScores(player.RoomCode, questionId);
+                    }
 
                     await SendMessage(player.RoomCode, $"{player.Name} has left.");
                 }
             }
         }
 
-        public async Task SendPlayers(string code, List<Player> players)
+        public async Task SendPlayers(string code, List<PlayerDTO> players)
         {
             await Clients.Group(code).SendAsync("ReceivePlayers", players);
+        }
+
+        public async Task SendPlayerScores(string code, long? questionId = null)
+        {
+            List<PlayerDTO> playerScores = [];
+
+            if (_rooms.TryGetValue(code, out Room? room))
+            {
+                foreach (var player in room.Players)
+                {
+                    PlayerDTO playerScore = new() {
+                        Name = player.Name
+                    };
+
+                    if (questionId != null)
+                    {
+                        var score = room.Game?.Scores.FirstOrDefault(score => score.PlayerId == player.Id && score.GameId == room.Game.Id && score.QuestionId == questionId);
+
+                        if (score != null)
+                        {
+                            playerScore.Score = ScoreToDTO(score) ?? null;
+                        }
+                    }
+
+                    playerScore.TotalPoints = player.TotalPoints;
+
+                    playerScores.Add(playerScore);
+                }
+            }
+
+            await SendPlayers(code, playerScores);
         }
 
         public async Task SendMessage(string code, string message)
@@ -145,7 +206,7 @@ namespace QuizApi.Hubs
         {
             if (_rooms.TryGetValue(code, out Room? room))
             {
-                var player = room.Players.FirstOrDefault(player => player.ConnectionId == Context.ConnectionId);
+                var player = room.Players.FirstOrDefault(player => player.Id == Context.ConnectionId);
                 if (player != null)
                 {
                     await Clients.GroupExcept(code, Context.ConnectionId).SendAsync("ReceiveMessage", message, player.Name);
@@ -169,13 +230,36 @@ namespace QuizApi.Hubs
             {
                 if (room.Game?.CanAnswer == true)
                 {
-                    var question = await _context.Questions.FindAsync(questionId);
+                    var player = FindPlayerById(Context.ConnectionId);
 
-                    if (question != null && question.AcceptedAnswers != null)
+                    if (player != null)
                     {
-                        var result = _questionsService.IsAnswerRight(userAnswer, question.AcceptedAnswers) ? AnswerResult.Right : AnswerResult.Wrong;
+                        var score = room.Game.Scores.FirstOrDefault(score => score.PlayerId == player.Id && score.QuestionId == questionId);
 
-                        await Clients.Caller.SendAsync("ReceiveAnswerResult", result);
+                        if (score != null && score.Tries < _maxAnswerTries)
+                        {
+                            var question = await _context.Questions.FindAsync(questionId);
+
+                            if (question != null && question.AcceptedAnswers != null)
+                            {
+                                var result = _questionsService.IsAnswerRight(userAnswer, question.AcceptedAnswers) ? AnswerResult.Right : AnswerResult.Wrong;
+
+                                score.Tries++;
+
+                                if (result == AnswerResult.Right)
+                                {
+                                    score.HasAnsweredRight = true;
+                                    score.Points = Math.Max(_minPointsByQuestion, _maxPointsByQuestion - room.Game.RightAnswerNumber);
+                                    score.Order = ++room.Game.RightAnswerNumber;
+
+                                    player.TotalPoints += score.Points;
+
+                                    await SendPlayerScores(code, questionId);
+                                }
+
+                                await Clients.Caller.SendAsync("ReceiveAnswerResult", result);
+                            }
+                        }
                     }
                 }
             }
@@ -189,9 +273,16 @@ namespace QuizApi.Hubs
             }
         }
 
-        public static Player? FindPlayerByConnectionId(string id)
+        public static Player? FindPlayerById(string id)
         {
-            return _rooms.SelectMany(room => room.Value.Players).FirstOrDefault(player => player.ConnectionId == id);
+            return _rooms.SelectMany(room => room.Value.Players).FirstOrDefault(player => player.Id == id);
         }
+
+        public static ScoreDTO ScoreToDTO(Score score) => new()
+        {
+            HasAnsweredRight = score.HasAnsweredRight,
+            Points = score.Points,
+            Order = score.Order
+        };
     }
 }

@@ -1,9 +1,8 @@
 namespace QuizApi.Models;
 
-public class Player
+public class PlayerDTO
 {
-    public string Id { get; set; } = null!;
     public string Name { get; set; } = null!;
     public int TotalPoints { get; set; } = 0;
-    public string RoomCode { get; set; } = null!;
+    public ScoreDTO? Score { get; set; }
 }
