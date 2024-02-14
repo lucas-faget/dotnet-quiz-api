@@ -114,14 +114,7 @@ namespace QuizApi.Controllers
                 return NotFound();
             }
 
-            if (question.AcceptedAnswers != null && _questionsService.IsAnswerRight(userAnswer, question.AcceptedAnswers))
-            {
-                return Ok(new { Result = AnswerResult.Right });
-            }
-            else
-            {
-                return Ok(new { Result = AnswerResult.Wrong });
-            }
+            return Ok(new { Result = _questionsService.GetAnswerResult(userAnswer, question.AcceptedAnswers) });
         }
     }
 }

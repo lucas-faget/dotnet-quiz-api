@@ -7,6 +7,9 @@ namespace QuizApi.Services
 {
     public class QuestionsService : IQuestionsService
     {
+        private static readonly double _minRightAnswerSimilarity = 0.85;
+        private static readonly double _minAlmostRightAnswerSimilarity = 0.7;
+
         public QuestionDTO QuestionToDTO(Question question) => new()
         {
             Id = question.Id,
@@ -15,9 +18,41 @@ namespace QuizApi.Services
             Difficulty = question.Difficulty
         };
 
-        public bool IsAnswerRight(string userAnswer, List<string> acceptedAnswers)
+        public List<Question> LoadQuestionsFromJson()
         {
-            return acceptedAnswers.Any(answer => string.Equals(RemoveDiacriticsAndWhiteSpaces(userAnswer), RemoveDiacriticsAndWhiteSpaces(answer), StringComparison.OrdinalIgnoreCase));
+            string jsonFilePath = "Questions.json";
+
+            if (!File.Exists(jsonFilePath))
+            {
+                return [];
+            }
+
+            string json = File.ReadAllText(jsonFilePath);
+
+            var questions = JsonConvert.DeserializeObject<List<Question>>(json);
+
+            return questions ?? [];
+        }
+
+        public AnswerResult GetAnswerResult(string userAnswer, List<string> acceptedAnswers)
+        {
+            double maxSimilarity = 0.0;
+
+            string normalizedUserAnswer = RemoveDiacriticsAndWhiteSpaces(userAnswer);
+
+            foreach (string acceptedAnswer in acceptedAnswers)
+            {
+                double similarity = CalculateSimilarity(normalizedUserAnswer, RemoveDiacriticsAndWhiteSpaces(acceptedAnswer));
+
+                maxSimilarity = similarity > maxSimilarity ? similarity : maxSimilarity;
+            }
+
+            if (maxSimilarity > _minRightAnswerSimilarity)
+                return AnswerResult.Right;
+            else if (maxSimilarity > _minAlmostRightAnswerSimilarity)
+                return AnswerResult.AlmostRight;
+            else
+                return AnswerResult.Wrong;
         }
 
         public static string RemoveDiacriticsAndWhiteSpaces(string text)
@@ -37,20 +72,43 @@ namespace QuizApi.Services
             return stringBuilder.ToString();
         }
 
-        public List<Question> LoadQuestionsFromJson()
+        public static double CalculateSimilarity(string x, string y)
         {
-            string jsonFilePath = "Questions.json";
+            double maxLength = Math.Max(x.Length, y.Length);
 
-            if (!File.Exists(jsonFilePath))
-            {
-                return [];
+            if (maxLength > 0) {
+                return (maxLength - GetEditDistance(x, y)) / maxLength;
             }
 
-            string json = File.ReadAllText(jsonFilePath);
+            return 1.0;
+        }
 
-            var questions = JsonConvert.DeserializeObject<List<Question>>(json);
-
-            return questions ?? [];
+        public static int GetEditDistance(string x, string y)
+        {
+            int m = x.Length;
+            int n = y.Length;
+    
+            int[][] T = new int[m + 1][];
+            for (int i = 0; i < m + 1; ++i) {
+                T[i] = new int[n + 1];
+            }
+    
+            for (int i = 1; i <= m; i++) {
+                T[i][0] = i;
+            }
+            for (int j = 1; j <= n; j++) {
+                T[0][j] = j;
+            }
+    
+            int cost;
+            for (int i = 1; i <= m; i++) {
+                for (int j = 1; j <= n; j++) {
+                    cost = x[i - 1] == y[j - 1] ? 0: 1;
+                    T[i][j] = Math.Min(Math.Min(T[i - 1][j] + 1, T[i][j - 1] + 1), T[i - 1][j - 1] + cost);
+                }
+            }
+    
+            return T[m][n];
         }
     }
 }

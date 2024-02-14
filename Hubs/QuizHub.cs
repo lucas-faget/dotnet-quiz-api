@@ -48,7 +48,7 @@ namespace QuizApi.Hubs
 
             await SendMessage(room.Code, $"{playerName} has created the room.");
 
-            await SendMessage(room.Code, $"Room code : {room.Code}");
+            await SendMessage(room.Code, $"Code : {room.Code}");
 
             return room.Code;
         }
@@ -242,7 +242,7 @@ namespace QuizApi.Hubs
 
                             if (question != null && question.AcceptedAnswers != null)
                             {
-                                var result = _questionsService.IsAnswerRight(userAnswer, question.AcceptedAnswers) ? AnswerResult.Right : AnswerResult.Wrong;
+                                AnswerResult result = _questionsService.GetAnswerResult(userAnswer, question.AcceptedAnswers);
 
                                 score.Tries++;
 
