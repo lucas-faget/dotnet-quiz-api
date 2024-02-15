@@ -38,11 +38,11 @@ namespace QuizApi.Services
         {
             double maxSimilarity = 0.0;
 
-            string normalizedUserAnswer = RemoveDiacriticsAndWhiteSpaces(userAnswer);
+            string normalizedUserAnswer = NormalizeString(userAnswer);
 
             foreach (string acceptedAnswer in acceptedAnswers)
             {
-                double similarity = CalculateSimilarity(normalizedUserAnswer, RemoveDiacriticsAndWhiteSpaces(acceptedAnswer));
+                double similarity = CalculateSimilarity(normalizedUserAnswer, NormalizeString(acceptedAnswer));
 
                 maxSimilarity = similarity > maxSimilarity ? similarity : maxSimilarity;
             }
@@ -55,7 +55,12 @@ namespace QuizApi.Services
                 return AnswerResult.Wrong;
         }
 
-        public static string RemoveDiacriticsAndWhiteSpaces(string text)
+        /**
+         * Remove white spaces
+         * Remove diacritics
+         * Lowercase
+         */
+        public static string NormalizeString(string text)
         {
             string normalizedString = text.Normalize(NormalizationForm.FormD);
     
@@ -65,7 +70,7 @@ namespace QuizApi.Services
             {
                 if (!char.IsWhiteSpace(c) && CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
                 {
-                    stringBuilder.Append(c);
+                    stringBuilder.Append(char.ToLower(c));
                 }
             }
     

@@ -194,7 +194,9 @@ namespace QuizApi.Hubs
                 }
             }
 
-            await SendPlayers(code, playerScores);
+            var sortedPlayerScores = playerScores.OrderByDescending(player => player.TotalPoints).ToList();
+
+            await SendPlayers(code, sortedPlayerScores);
         }
 
         public async Task SendMessage(string code, string message)
