@@ -13,7 +13,7 @@ public class Score
     [Key]
     public long QuestionId { get; set; }
 
-    public int Tries { get; set; } = 0;
+    public int TryNumber { get; set; } = 0;
 
     public bool HasAnsweredRight { get; set; } = false;
 

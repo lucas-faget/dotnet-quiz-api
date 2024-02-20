@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using NuGet.Protocol.Plugins;
 using QuizApi.Models;
 using QuizApi.Services;
 
@@ -11,7 +10,7 @@ namespace QuizApi.Hubs
         private static readonly int _questionCount = 20;
         private static readonly int _timeToAnswerInSeconds = 20;
         private static readonly int _timeBetweenTwoQuestionsInSeconds = 5;
-        private static readonly int _maxAnswerTries = 3;
+        private static readonly int _maxAnswerTryNumber = 3;
         private static readonly int _minPointsByQuestion = 5;
         private static readonly int _maxPointsByQuestion = 8;
         private readonly QuizContext _context;
@@ -44,7 +43,9 @@ namespace QuizApi.Hubs
                 RoomCode = room.Code
             });
 
-            await SendPlayerScores(room.Code);
+            List<PlayerDTO> players = GetPlayers(room.Code);
+
+            await SendPlayers(room.Code, players);
 
             await SendMessage(room.Code, $"{playerName} has created the room.");
 
@@ -69,7 +70,11 @@ namespace QuizApi.Hubs
                 {
                     var questionId = room.Game.QuestionNumber > 0 ? room.Game.Questions[room.Game.QuestionNumber - 1]?.Id : null;
 
-                    await SendPlayerScores(code, questionId);
+                    SetRanks(room.Code);
+
+                    List<PlayerDTO> players = GetPlayers(code, questionId);
+
+                    await SendPlayers(code, players);
                 }
 
                 await SendMessage(code, $"{playerName} has joined.");
@@ -95,6 +100,8 @@ namespace QuizApi.Hubs
 
                 await SendMessage(code, "Game has started.");
 
+                List<PlayerDTO> players;
+
                 foreach (var question in game.Questions)
                 {
                     await SendDelay(code, _timeBetweenTwoQuestionsInSeconds);
@@ -110,9 +117,13 @@ namespace QuizApi.Hubs
                             GameId = game.Id,
                             QuestionId = question.Id
                         });
+
+                        player.PreviousRank = player.Rank;
                     }
 
-                    await SendPlayerScores(code, question.Id);
+                    players = GetPlayers(code, question.Id);
+
+                    await SendPlayers(code, players);
 
                     game.RightAnswerNumber = 0;
                     game.CanAnswer = true;
@@ -126,7 +137,9 @@ namespace QuizApi.Hubs
                     await SendAnswer(code, question.Answer);
                 }
 
-                await SendPlayerScores(code);
+                players = GetPlayers(code);
+
+                await SendPlayers(code, players);
 
                 await SendMessage(code, "Game is over.");
             }
@@ -153,7 +166,11 @@ namespace QuizApi.Hubs
                     {
                         var questionId = room.Game.QuestionNumber > 0 ? room.Game.Questions[room.Game.QuestionNumber - 1]?.Id : null;
 
-                        await SendPlayerScores(player.RoomCode, questionId);
+                        SetRanks(room.Code);
+
+                        List<PlayerDTO> players = GetPlayers(player.RoomCode, questionId);
+
+                        await SendPlayers(player.RoomCode, players);
                     }
 
                     await SendMessage(player.RoomCode, $"{player.Name} has left.");
@@ -164,39 +181,6 @@ namespace QuizApi.Hubs
         public async Task SendPlayers(string code, List<PlayerDTO> players)
         {
             await Clients.Group(code).SendAsync("ReceivePlayers", players);
-        }
-
-        public async Task SendPlayerScores(string code, long? questionId = null)
-        {
-            List<PlayerDTO> playerScores = [];
-
-            if (_rooms.TryGetValue(code, out Room? room))
-            {
-                foreach (var player in room.Players)
-                {
-                    PlayerDTO playerScore = new() {
-                        Name = player.Name
-                    };
-
-                    if (questionId != null)
-                    {
-                        var score = room.Game?.Scores.FirstOrDefault(score => score.PlayerId == player.Id && score.GameId == room.Game.Id && score.QuestionId == questionId);
-
-                        if (score != null)
-                        {
-                            playerScore.Score = ScoreToDTO(score) ?? null;
-                        }
-                    }
-
-                    playerScore.TotalPoints = player.TotalPoints;
-
-                    playerScores.Add(playerScore);
-                }
-            }
-
-            var sortedPlayerScores = playerScores.OrderByDescending(player => player.TotalPoints).ToList();
-
-            await SendPlayers(code, sortedPlayerScores);
         }
 
         public async Task SendMessage(string code, string message)
@@ -238,7 +222,7 @@ namespace QuizApi.Hubs
                     {
                         var score = room.Game.Scores.FirstOrDefault(score => score.PlayerId == player.Id && score.QuestionId == questionId);
 
-                        if (score != null && score.Tries < _maxAnswerTries)
+                        if (score != null && score.TryNumber < _maxAnswerTryNumber)
                         {
                             var question = await _context.Questions.FindAsync(questionId);
 
@@ -246,7 +230,7 @@ namespace QuizApi.Hubs
                             {
                                 AnswerResult result = _questionsService.GetAnswerResult(userAnswer, question.AcceptedAnswers);
 
-                                score.Tries++;
+                                score.TryNumber++;
 
                                 if (result == AnswerResult.Right)
                                 {
@@ -256,7 +240,11 @@ namespace QuizApi.Hubs
 
                                     player.TotalPoints += score.Points;
 
-                                    await SendPlayerScores(code, questionId);
+                                    SetRanks(code);
+
+                                    List<PlayerDTO> players = GetPlayers(code, questionId);
+
+                                    await SendPlayers(code, players);
                                 }
 
                                 await Clients.Caller.SendAsync("ReceiveAnswerResult", result);
@@ -286,5 +274,68 @@ namespace QuizApi.Hubs
             Points = score.Points,
             Order = score.Order
         };
+
+        public void SetRanks(string code)
+        {
+            if (_rooms.TryGetValue(code, out Room? room))
+            {
+                List<Player> orderedPlayers = room.Players.OrderByDescending(player => player.TotalPoints).ToList();
+
+                for (int i = 0; i < orderedPlayers.Count; i++)
+                {
+                    if (i > 0 && orderedPlayers[i].TotalPoints == orderedPlayers[i-1].TotalPoints)
+                    {
+                        orderedPlayers[i].Rank = orderedPlayers[i-1].Rank;
+                    }
+                    else
+                    {
+                        orderedPlayers[i].Rank = i + 1;
+                    }
+                }
+
+                foreach (var player in room.Players)
+                {
+                    var orderedPlayer = orderedPlayers.FirstOrDefault(p => p.Id == player.Id);
+                    if (orderedPlayer != null)
+                    {
+                        player.Rank = orderedPlayer.Rank;
+                    }
+                }
+            }
+        }
+
+        public List<PlayerDTO> GetPlayers(string code, long? questionId = null)
+        {
+            List<PlayerDTO> players = [];
+
+            if (_rooms.TryGetValue(code, out Room? room))
+            {
+                foreach (var player in room.Players)
+                {
+                    PlayerDTO playerScore = new() {
+                        Name = player.Name,
+                        PreviousRank = player.PreviousRank,
+                        Rank = player.Rank,
+                        TotalPoints = player.TotalPoints
+                    };
+
+                    if (questionId != null)
+                    {
+                        var score = room.Game?.Scores.FirstOrDefault(score => score.PlayerId == player.Id && score.GameId == room.Game.Id && score.QuestionId == questionId);
+
+                        if (score != null)
+                        {
+                            playerScore.Score = ScoreToDTO(score) ?? null;
+                        }
+                    }
+
+                    players.Add(playerScore);
+                }
+            }
+
+            List<PlayerDTO> orderedPlayers = players.OrderByDescending(player => player.TotalPoints).ToList();
+
+            return orderedPlayers;
+        }
     }
 }
